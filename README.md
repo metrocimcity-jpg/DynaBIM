@@ -31,8 +31,11 @@ dist/Delta/
   pkg.json
   bin/Delta.dll
   bin/Delta.pdb
+  bin/Delta.Engine.dll
+  bin/Delta.Engine.pdb
   extra/Delta_ViewExtensionDefinition.xml
   doc/
+  dyf/
 ```
 
 Revit and Dynamo are referenced from the local install and are not copied into `bin`. Override the install locations if they differ:
@@ -116,12 +119,14 @@ Placeholder: `Select service type(s)...`. Summary: `1 of 4 service types`. If th
 
 ```text
 Delta.slnx
-src/Delta/          C# project (NodeModel nodes, WPF combobox, filter engine)
+src/Delta/          NodeModel nodes, WPF combobox, view extension
+src/Delta.Engine/   DesignScript filter methods (no NodeModel types)
 package/            pkg.json, view-extension manifest, node notes
+docs/               How the nodes run and why the dereference warning happened
 dist/Delta/         build output, ready to copy into Dynamo packages
 ```
 
-The three nodes are `NodeModel` classes with a WPF view. Dynamo's zero-touch import cannot draw a multi-select list on the node, so the selection is UI state and is passed into `DeltaFilterEngine` when the graph runs.
+The three nodes are `NodeModel` classes with a WPF view. Dynamo's zero-touch import cannot draw a multi-select list on the node, so the selection is UI state and is passed into `DeltaFilterEngine` when the graph runs. Those filter methods live in `Delta.Engine.dll` because Dynamo will not import zero-touch methods from an assembly that also contains node types. Details: [docs/Working-NodeModel.md](docs/Working-NodeModel.md).
 
 Refreshing a large model walks element instances on Revit's main thread and can pause the Dynamo window until the scan finishes. The Revit API is not called from a background thread. There is no document-changed subscription; **Refresh** is how the list is rebuilt after the model changes.
 

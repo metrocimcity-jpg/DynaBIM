@@ -1,42 +1,45 @@
 # Prompt 1 — Delta Node: "By Levels"
 
 ## Prerequisite
-Implement this on top of the shared scaffold from Prompt 0 (`DeltaMultiSelectFilterNodeBase`, `DeltaMultiSelectComboBox`, `DeltaFilterEngine`). Do not duplicate the combobox UI — inherit it.
+Implement this on top of the shared scaffold from Prompt 0 (`DeltaMultiSelectFilterNodeBase`, `DeltaMultiSelectComboBox`, `DeltaFilterEngine` in **Delta.Engine**). Do not duplicate the combobox UI — inherit it. Do not put this class in `Delta.Engine`.
 
 ## Node identity
 - Class: `Delta.Nodes.ByLevels`
 - Display name: **By Levels**
 - Category: `Delta.Filter`
-- Tooltip/description: "Filters the input elements to only those whose associated Level is one of the levels selected in the node's combobox. Only levels that are actually used by at least one element instance in the current model are listed."
+- Tooltip/description: "Filters elements to those on the selected levels. Only levels used by at least one element are listed, sorted by elevation. Nothing selected returns an empty list. Linked-model elements are excluded."
 - Input port: `elements` — a flat or nested list of `Revit.Elements.Element`.
 - Output port: `filtered elements` — same structure, containing only the elements that matched.
+- Attributes: `[IsDesignScriptCompatible]` and `[SupressImportIntoVM]`.
 
 ## Combobox data source: "used levels" query
 Implement `QueryAvailableValues(Document doc)`:
 1. Do **not** simply collect all `Level` elements in the project (`FilteredElementCollector(doc).OfClass(typeof(Level))`) — that lists every level whether or not anything uses it. The requirement is: **only levels actually referenced by at least one element instance**.
-2. Build the used-level set by scanning element instances, not by trusting `Level.IsValidObject` alone:
+2. Build the used-level set by scanning element instances:
    - Use `new FilteredElementCollector(doc).WhereElementIsNotElementType()` as the base instance collector (exclude element *types*).
-   - For each instance, resolve its associated level robustly, since Revit exposes "level" through several different mechanisms depending on category:
-     - `element.LevelId` (works for many host-based elements).
-     - `element.get_Parameter(BuiltInParameter.FAMILY_LEVEL_PARAM)` / `SCHEDULE_LEVEL_PARAM` / `RBS_START_LEVEL_PARAM` (MEP curve elements like ducts/pipes/cable trays use start-level style parameters — check both start/reference level parameters relevant to MEP, since this package is MEP-flavored per the sibling nodes).
-     - Fallback: `element.Document.GetElement(element.LevelId)` when `LevelId != ElementId.InvalidElementId`.
-   - Collect the set of distinct valid `Level` elements found this way (dedupe by `ElementId`).
-   - **Performance note**: this is a full-document scan and can be slow on large models. Do it once per `RefreshValues()` call (triggered by node creation + the manual Refresh button, per Prompt 0), never per-execution, and consider running it via `Task.Run`-off-UI-thread with results marshaled back to the `ObservableCollection` on the dispatcher, so the Dynamo UI does not freeze while scanning a large project.
-3. For each surviving `Level`, create a `DeltaSelectableItem { Id = level.Id.ToString() (or level.UniqueId), Name = level.Name }`.
-4. Sort the resulting list by `Level.Elevation` ascending (not alphabetically) so the combobox mirrors the project's physical stacking order — this is the expected UX for anyone used to Revit's own level list.
+   - For each instance, resolve its associated level in this **fixed order** (same order as matching):
+     1. `element.LevelId`
+     2. `FAMILY_LEVEL_PARAM`
+     3. `SCHEDULE_LEVEL_PARAM`
+     4. `RBS_START_LEVEL_PARAM`
+     5. `INSTANCE_REFERENCE_LEVEL_PARAM`
+   - Collect distinct valid `Level` elements (dedupe by `UniqueId`). A `LevelId` that points at a deleted level is ignored.
+   - Run this only inside `RefreshValues()` on the **Revit/UI thread**. Do **not** `Task.Run` the Revit API. A large model can pause the Dynamo window until the scan finishes; that is accepted for v1.
+3. For each surviving `Level`, create a `DeltaSelectableItem` with `Id = level.UniqueId` and `Name = level.Name`. **Do not key on `ElementId`** — UniqueId survives save/reload and is what matching uses.
+4. Sort by `Level.Elevation` ascending (not alphabetically).
 
 ## Matching logic
 Implement `ElementMatchesSelection(Element revitElement, HashSet<string> selectedIds)`:
-- Resolve the element's level using the **same resolution order** used in `QueryAvailableValues` (LevelId, then the MEP level-style parameters, in that priority) so the matching logic and the population logic never disagree about "what level does this element belong to."
-- Return `true` only if the resolved level's `Id`/`UniqueId` is in `selectedIds`.
-- If the element has no resolvable level at all, it never matches (excluded from output, does not throw).
+- Resolve the element's level using the **same resolution order** used in `QueryAvailableValues`.
+- Return `true` only if the resolved level's `UniqueId` is in `selectedIds`.
+- If the element has no resolvable level, it never matches (excluded, does not throw).
 
 ## `DeltaFilterEngine.FilterByLevels`
-- Signature per Prompt 0: `FilterByLevels(IList<Revit.Elements.Element> elements, string selectedLevelIdsCsv)`.
-- Parse the CSV into a `HashSet<string>`.
-- If empty, return an empty list (per Prompt 0's documented "no active criteria = empty output" convention) — but call this out explicitly again in this node's tooltip text so users filtering by level understand why an untouched node outputs nothing.
-- Iterate input elements, unwrap each to the internal Revit `Element` (`.InternalElement`), call the matching logic, keep the ones that match, and re-wrap as `Revit.Elements.Element` for output (use `ElementWrapper.ToDSType` or the equivalent Dynamo-Revit interop helper available in Dynamo 4's `RevitNodes` assembly — confirm exact method name/signature against the installed SDK).
-- Preserve input order and any nested-list structure (if the input was a nested list/lacing-aware collection, flatten-and-refilter is **not** acceptable — process list levels using Dynamo's standard list-structure-preserving pattern, e.g. via `[MultiReturn]`-free recursive helper or by leaning on the NodeModel's own AST list-mapping if the base class does that generically — decide and document which behavior Delta guarantees).
+- Lives in `Delta.Engine`. Signature: `FilterByLevels([ArbitraryDimensionArrayImport] object elements, string selectedLevelIdsJson)`.
+- Decode JSON with `SelectionCodec.ToSet` (ordinal-ignore-case). Empty set → empty `ArrayList`.
+- State empty-selection → empty list in the tooltip.
+- Unwrap each Dynamo element, match, keep original wrappers. Nested lists keep structure and order (`ListFilter`). Linked-model elements excluded with one warning per run.
+- `BuildFilterCall` uses `CallEngine(nameof(DeltaFilterEngine.FilterByLevels), …)` with the elements AST and a string node of the JSON selection.
 
 ## UI copy specifics for this node
 - Combobox placeholder text when nothing is selected: `"Select level(s)..."`
@@ -44,8 +47,9 @@ Implement `ElementMatchesSelection(Element revitElement, HashSet<string> selecte
 - Empty state (no used levels found, e.g. no elements in project or no open document): show `"No levels found in model"` and disable the combobox rather than showing an empty dropdown arrow with nothing behind it.
 
 ## Edge cases to explicitly test
-- [ ] Model with elements on levels that have since been deleted from the project but whose old `LevelId` still lingers on stale elements — must not throw a `NullReferenceException`; such elements are simply excluded (no level match).
-- [ ] Linked-model elements passed into `elements` input (elements from a Revit link) — decide and document whether linked elements are supported at all in v1 (recommended: **not supported in v1**, filter them out silently or short-circuit with a warning via `Warning("...")` on the node, since level/type resolution differs for link instances).
-- [ ] Very large list input (10,000+ elements) — confirm reasonable execution time; this loop is O(n) over the input list plus O(1) hash lookups per element, so it should scale linearly and does not re-scan the document per execution (only `RefreshValues()` does that).
-- [ ] Selecting zero levels after previously having some selected (user un-checks everything) — output becomes empty, no crash.
-- [ ] Switching the active Revit document mid-session and clicking Refresh — old selections that no longer correspond to a valid level ID in the new document are dropped from `SelectableItems` and from the persisted selection.
+- [ ] Model with elements on levels that have since been deleted from the project but whose old `LevelId` still lingers on stale elements — must not throw; such elements are simply excluded.
+- [ ] Linked-model elements passed into `elements` — **not supported in v1**. Filter them out and emit one `LogWarningMessageEvents` warning per run.
+- [ ] Very large list input (10,000+ elements) — O(n) over the input plus O(1) hash lookups; document scan happens only on Refresh, on the main thread.
+- [ ] Selecting zero levels after previously having some selected — output becomes an empty list, not `null`, no crash.
+- [ ] Switching the active Revit document mid-session and clicking Refresh — old UniqueIds that do not exist in the new document are dropped.
+- [ ] Watch on `filtered elements` is a list when ducts (or any host) are connected and levels are checked. `null` plus `Dereferencing a non-pointer` is an import/AST failure, not a matching miss — see Prompt 0 and `docs/Working-NodeModel.md`.
