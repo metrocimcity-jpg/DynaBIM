@@ -1,0 +1,4 @@
+<ViewExtensionDefinition>
+  <AssemblyPath>..\bin\Delta.dll</AssemblyPath>
+  <TypeName>Delta.DeltaViewExtension</TypeName>
+</ViewExtensionDefinition>

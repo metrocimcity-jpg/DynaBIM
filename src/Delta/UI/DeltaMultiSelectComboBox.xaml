@@ -1,0 +1,82 @@
+<UserControl x:Class="Delta.UI.DeltaMultiSelectComboBox"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             MinWidth="220"
+             HorizontalAlignment="Stretch"
+             Margin="0,4,0,4">
+  <UserControl.Resources>
+    <BooleanToVisibilityConverter x:Key="BoolToVis" />
+  </UserControl.Resources>
+  <Grid>
+    <ToggleButton x:Name="Header"
+                  MinHeight="26"
+                  Padding="8,2"
+                  HorizontalContentAlignment="Stretch"
+                  IsEnabled="{Binding HasItems}">
+      <DockPanel LastChildFill="True">
+        <TextBlock DockPanel.Dock="Right"
+                   Text="&#x25BE;"
+                   Margin="8,0,0,0"
+                   VerticalAlignment="Center" />
+        <TextBlock Text="{Binding SummaryText}"
+                   TextTrimming="CharacterEllipsis"
+                   VerticalAlignment="Center" />
+      </DockPanel>
+    </ToggleButton>
+    <Popup PlacementTarget="{Binding ElementName=Header}"
+           Placement="Bottom"
+           StaysOpen="False"
+           AllowsTransparency="True"
+           IsOpen="{Binding IsChecked, ElementName=Header, Mode=TwoWay}"
+           Opened="Popup_Opened">
+      <Border MinWidth="220"
+              MaxHeight="320"
+              Padding="8"
+              Background="White"
+              BorderBrush="#C8C8C8"
+              BorderThickness="1">
+        <DockPanel>
+          <TextBox x:Name="SearchBox"
+                   DockPanel.Dock="Top"
+                   Margin="0,0,0,6"
+                   ToolTip="Filter the list. This does not change the selection."
+                   Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+          <StackPanel DockPanel.Dock="Top"
+                      Orientation="Horizontal"
+                      Margin="0,0,0,6">
+            <Button Content="Select All"
+                    Margin="0,0,6,0"
+                    Padding="6,2"
+                    Command="{Binding SelectAllCommand}" />
+            <Button Content="Clear"
+                    Margin="0,0,6,0"
+                    Padding="6,2"
+                    Command="{Binding ClearCommand}" />
+            <Button Content="Refresh"
+                    Padding="6,2"
+                    Command="{Binding RefreshCommand}" />
+          </StackPanel>
+          <StackPanel DockPanel.Dock="Bottom"
+                      Margin="0,8,0,0"
+                      Visibility="{Binding SupportsParameterName, Converter={StaticResource BoolToVis}}">
+            <TextBlock Text="Parameter name"
+                       Margin="0,0,0,2" />
+            <TextBox Text="{Binding ParameterName, UpdateSourceTrigger=LostFocus}"
+                     ToolTip="Shared or project parameter to read. Press Tab or click away to apply." />
+          </StackPanel>
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding FilteredItems}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <CheckBox Content="{Binding Name}"
+                            IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                            Margin="0,2" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+    </Popup>
+  </Grid>
+</UserControl>

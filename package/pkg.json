@@ -1,0 +1,33 @@
+{
+  "license": "MIT",
+  "file_hash": null,
+  "name": "Delta",
+  "version": "1.0.0",
+  "description": "MEP-oriented element filtering nodes for Revit: filter by Level, System Type, and Service Type using multi-select node UI.",
+  "group": "Delta",
+  "keywords": [
+    "mep",
+    "filter",
+    "level",
+    "system type",
+    "service type",
+    "revit"
+  ],
+  "dependencies": [],
+  "host_dependencies": [
+    "Revit"
+  ],
+  "contents": "",
+  "engine_version": "4.0",
+  "engine": "dynamo",
+  "engine_metadata": "",
+  "site_url": "",
+  "repository_url": "",
+  "contains_binaries": true,
+  "node_libraries": [
+    "Delta.Engine, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+    "Delta, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+  ],
+  "copyright_holder": "Metropolitan CIM",
+  "copyright_year": "2026"
+}

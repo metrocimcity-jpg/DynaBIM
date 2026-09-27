@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Delta.Engine/Delta.Engine.csproj" />
+    <Project Path="src/Delta/Delta.csproj" />
+  </Folder>
+</Solution>
